@@ -1,0 +1,13 @@
+# 串口输出等级：INFO 及以上（方便看测试日志）
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y
+
+# FreeRTOS tick 1ms，采样周期更准（vTaskDelay 精度 1ms）
+CONFIG_FREERTOS_HZ=1000
+
+# 主任务栈加大一点，日志多一些也不会溢出
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=4096
+
+# 本机实测板子 Flash 为 16MB（启动日志: detected chip size 16384k / boya 颗粒），
+# 与正点原子 DNESP32S3 一致。若换 4MB/8MB 板子，在 menuconfig 里改小即可。
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="16MB"

@@ -1,0 +1,26 @@
+# ESP-IDF 构建产物
+build/
+sdkconfig
+sdkconfig.old
+*.bin
+*.elf
+*.map
+*.d
+
+# 私有开发记录（不发布）
+docs/journal.md
+
+# Python
+__pycache__/
+*.py[cod]
+host/.venv/
+.venv/
+
+# 编辑器
+.vscode/
+.idea/
+*.swp
+
+# 系统
+Thumbs.db
+.DS_Store
