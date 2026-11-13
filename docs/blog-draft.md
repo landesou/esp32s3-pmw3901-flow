@@ -8,7 +8,9 @@
 
 值得写下来的原因：这个项目里真正花时间的不是"点亮"，而是**"代码编译通过了、ID 也读到了，但数据是错的"**这三次定位——运动标志读错位、快门寄存器分两次读导致高低字节错位、串口被别的程序抢走。这三个坑都在数据层面，看日志不仔细就会当成"传感器就这德行"。
 
-<!-- TODO: 截图：串口 monitor 里 chip id 0x49/0xB6 + init done 的启动日志 -->
+![实机运行界面](https://cdn.jsdelivr.net/gh/landesou/esp32s3-pmw3901-flow@main/host/capture_real.png)
+
+> 图 0：实机运行的上位机界面（接 COM6，采样率 50.0 Hz，364 包、0 坏帧）。图片来自仓库 `host/capture_real.png`。
 
 ---
 
@@ -22,7 +24,6 @@ PixArt 的 PMW3901 是这类传感器里非常常见的一颗：4 线 SPI，直�
 
 选它的理由很朴素：**接口简单 + 资料够多**。初始化寄存器序列可以从 [Bitcraze_PMW3901](https://github.com/bitcraze/Bitcraze_PMW3901)（MIT）抄，寄存器语义在 LibDriver 和 ArduPilot 的实现里能交叉验证，出问题时有地方对照——这对第一次碰光流的人来说，比参数表上的几个小数点重要得多。
 
-<!-- TODO: 截图：逐飞 PMW3901 光流模块实物（正面镜头 / 背面丝印） -->
 
 ### 它的局限，最好一开始就知道
 
@@ -54,7 +55,6 @@ PixArt 的 PMW3901 是这类传感器里非常常见的一颗：4 线 SPI，直�
 2. **杜邦线别太长**（<15cm），长了先把 SPI 时钟从 2MHz 降到 1MHz 排查；
 3. **别和 LCD 抢 SPI2**：很多 ESP32-S3 例程里 LCD 也占 GPIO11/12/13，同时用时要么换引脚，要么把两个设备挂到同一条 SPI 总线（`spi_bus_initialize` 只调一次，再 `spi_bus_add_device`）。
 
-<!-- TODO: 截图：接线实物（模块 + 杜邦线 + 开发板） -->
 
 ---
 
@@ -200,7 +200,12 @@ no motion detected in 5 s: lens faces down? textured surface? height >= 8 cm?
 
 改完 `motion = burst[0] & 0x80` 之后，移动模块时 `motion` 帧数从 0 一路涨到 442，dx/dy 同步响应。
 
-<!-- TODO: 截图：motion 帧数从 0 开始增长 + 5s 误报警告的日志 -->
+修复后实机日志（移动模块时 `motion` 帧数持续增长）：
+
+```
+I (6156) FLOW: dx=  +9 dy=  -5 cnt | total=(+32,+38) | v=(+0.0,-83.6) mm/s | squal= 52 shutter= 2077 | frames=181 motion=168
+I (12156) FLOW: dx= -10 dy= -13 cnt | total=(-459,-788) | v=(-407.5,-783.8) mm/s | squal= 220 shutter= 2701 | frames=481 motion=442
+```
 
 > 结论：判断"有没有运动"看 `0x16` burst 的 `burst[0] & 0x80`，`0x02` 的 bit0 不对。
 
@@ -217,7 +222,20 @@ no motion detected in 5 s: lens faces down? textured surface? height >= 8 cm?
 
 > 诚实说明：两个改动是同时做的，**没法把"乱跳"单独归因给哪一个**。"分开读会跨帧拼错"是合理的技术推断，但当时没有做受控实验去分离这两个因素。
 
-<!-- TODO: 截图：修好前后两段串口日志对比（shutter 乱跳 vs 稳定 2830） -->
+修复前（分寄存器读、地址也错，`shutter` 在 0~8191 之间跳）：
+
+```
+I (2776) FLOW: ... squal= 62 shutter= 3762 | frames=11 motion=0
+I (3436) FLOW: ... squal= 28 shutter=   64 | frames=41 motion=0
+I (11796) FLOW: ... squal= 53 shutter= 8191 | frames=421 motion=0
+```
+
+修复后（`0x16` burst 原子读）：
+
+```
+I (4774) FLOW: ... squal=208 shutter= 2830 | frames=212 motion=116
+I (4974) FLOW: ... squal=212 shutter= 2830 | frames=222 motion=123
+```
 
 ### 坑 3：`Could not open COM6, the port is busy or doesn't exist.`
 
@@ -231,7 +249,6 @@ A fatal error occurred: Could not open COM6, the port is busy or doesn't exist.
 
 处理很直接：`taskkill //PID <pid> //F` 结束那两个进程，端口立刻释放。教训是**烧录前先关掉所有自动连串口的常驻程序**，或者干脆给它固定一个别的串口。
 
-<!-- TODO: 截图：esptool 报 Could not open COM6 的终端截图 -->
 
 ### 坑 4（小）：冷启动第一次读 ID 得到 0x00 / 0x00
 
@@ -345,8 +362,9 @@ def parse_flow_line(raw: bytes):
 
 ### 8.2 界面
 
-<!-- TODO: 截图：上位机实机运行界面，原图 host/capture_real.png（上传 CSDN 后替换为图床链接） -->
-> 图 1：接实机 COM6 采 8 秒——状态栏 `采样率 50.0Hz / 包 364 / 坏帧 0`，蓝线是手托模块移动留下的轨迹。来源：`host/capture_real.png`
+![上位机界面（演示模式）](https://cdn.jsdelivr.net/gh/landesou/esp32s3-pmw3901-flow@main/host/demo_capture.png)
+
+> 图 1：演示模式（`--demo`）下的完整界面，布局与实机一致；实机时状态栏显示 `采样率 50.0 Hz / 包 364 / 坏帧 0`。图片来自仓库 `host/demo_capture.png`。
 
 界面是三块图 + 一行状态栏，各管一件事：
 
@@ -357,7 +375,7 @@ def parse_flow_line(raw: bytes):
 
 参数栏提供对地高度、系数 K、翻转 X/Y、清零、标定 K、暂停、跟随视图、保存 CSV、截图。高度、K、翻转、波特率这些设置会持久化，下次打开还在。
 
-实机跑 8 秒的截图里，状态栏是 `采样率 50.0 Hz / 包 364 / 坏帧 0`，左边那条蓝线就是用手托着模块在桌面上来回移动的轨迹——形状当然是乱的，但**每一段的方向都和手的移动方向对得上**，这就是"数据通到界面"的证据。
+实机跑 8 秒时（见文首图 0），状态栏是 `采样率 50.0 Hz / 包 364 / 坏帧 0`，左边那条蓝线就是用手托着模块在桌面上来回移动的轨迹——形状当然是乱的，但**每一段的方向都和手的移动方向对得上**，这就是"数据通到界面"的证据。
 
 ### 8.3 按已知距离自动标定 K
 
@@ -385,6 +403,10 @@ K = 距离 / (counts × 高度)
 
 `--capture N --shot out.png` 这条命令是专门为联调加的：采 N 秒 → 自动截图 → 存 CSV → 打印包数/坏帧/采样率，然后退出。以后改代码，一条命令就能做回归，不用再手动点界面。
 
+![离线自检](https://cdn.jsdelivr.net/gh/landesou/esp32s3-pmw3901-flow@main/host/selftest.png)
+
+> 图 2：离线自检（`--selftest`）生成的界面：合成圆周 525 帧、50.0 Hz，不接板子也能验证整条渲染链路。
+
 ### 8.5 上位机踩的 4 个小坑
 
 1. **`QSettings` 在 `QtCore` 里，不在 `QtWidgets` 里**。`from PyQt5 import QtWidgets` 之后顺手写 `QtWidgets.QSettings`，会直接报属性不存在。这个错误很低级，但 PyQt 的命名空间分散在 QtCore/QtGui/QtWidgets 三个模块，第一次写很容易踩。
@@ -392,8 +414,7 @@ K = 距离 / (counts × 高度)
 3. **采样率用本机时钟算，离屏自检显示 0Hz**。第一版用本机 `time.monotonic()` 统计帧率，正常使用时没问题；但 `--selftest` 是瞬间灌 525 个样本，本机时钟几乎没走，算出来就是 0（或者一个巨大的假值）。改成用设备时间戳 `t_ms` 之后，自检和实机都能稳定显示 50.0 Hz——**这也说明时间戳应该由数据源给，而不是由接收端猜**。
 4. **演示数据的整数 counts 把圆周画成了多边形**。合成圆周每帧位移只有 1~2 counts，`int(round())` 之后误差会累积成锯齿。解决办法是"误差扩散"：把这一帧舍入丢掉的小数加到下一帧再取整。截图里圆边缘还有一点台阶，那是 1 count ≈ 2.09mm 的物理分辨率决定的，不是 bug。
 
-<!-- TODO: 截图：`--demo` 合成圆周（原图 host/demo_capture.png，上传 CSDN 后替换为图床链接） -->
-> 图 2：演示模式 5 秒，`packets=161 bad=0`。圆边缘的细微台阶就是整数 counts 量化留下的痕迹。来源：`host/demo_capture.png`
+> 演示模式的截图见 8.2（`packets=161 bad=0`）。圆边缘的细微台阶就是整数 counts 量化留下的痕迹，不是渲染 bug。
 
 ---
 
